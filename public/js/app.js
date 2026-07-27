@@ -1,546 +1,432 @@
 /**
- * 🌙 "EVERY FEELING HAS A MEANING" - AUTH GATED FRONTEND APP
+ * "Every Feeling Has a Meaning" - Application Control Engine
+ * Integrated Landing Page, Auth Portal, Moon Gateway & Personal Diary
  */
 
-document.addEventListener('DOMContentLoaded', () => {
-  const state = {
-    moonPhase: 'full',
-    category: 'Clarity',
-    isMovieMode: false,
-    userInput: '',
-    currentQuote: null,
-    sessionHistory: [],
-    token: localStorage.getItem('moon_auth_token') || null,
-    user: JSON.parse(localStorage.getItem('moon_user') || 'null'),
-    diaryEntries: [],
-    diaryFilter: 'all'
-  };
-
-  // Views & Header
-  const navControls = document.getElementById('navControls');
-  const lockedView = document.getElementById('lockedView');
-  const unlockedApp = document.getElementById('unlockedApp');
-
-  // Lock Auth Form Elements
-  const lockLoginTab = document.getElementById('lockLoginTab');
-  const lockSignupTab = document.getElementById('lockSignupTab');
-  const lockAuthForm = document.getElementById('lockAuthForm');
-  const lockAuthEmail = document.getElementById('lockAuthEmail');
-  const lockAuthPassword = document.getElementById('lockAuthPassword');
-  const lockAuthSubmitBtn = document.getElementById('lockAuthSubmitBtn');
-  const lockAuthErrorMsg = document.getElementById('lockAuthErrorMsg');
-  let isLockAuthModeLogin = true;
-
-  // Unlocked App Elements
-  const fullMoonCard = document.getElementById('fullMoonCard');
-  const crescentMoonCard = document.getElementById('crescentMoonCard');
-  const movieModeBtn = document.getElementById('movieModeBtn');
-  
-  const categoryPills = document.getElementById('categoryPills');
-  const userInputText = document.getElementById('userInputText');
-  const clearInputBtn = document.getElementById('clearInputBtn');
-  const inputFieldWrap = userInputText?.closest('.input-field-wrap');
-  
-  const suggestionsContainer = document.getElementById('suggestionsContainer');
-  const movieSuggestionsContainer = document.getElementById('movieSuggestionsContainer');
-
-  const generateQuoteBtn = document.getElementById('generateQuoteBtn');
-  const refreshQuoteBtn = document.getElementById('refreshQuoteBtn');
-  const copyQuoteBtn = document.getElementById('copyQuoteBtn');
-  const saveQuoteBtn = document.getElementById('saveQuoteBtn');
-  
-  const quoteBody = document.getElementById('quoteBody');
-  const quoteLoader = document.getElementById('quoteLoader');
-  const quoteText = document.getElementById('quoteText');
-  const quoteAuthor = document.getElementById('quoteAuthor');
-  const quotePhaseBadge = document.getElementById('quotePhaseBadge');
-  const quoteCategoryBadge = document.getElementById('quoteCategoryBadge');
-  const quoteMovieBadge = document.getElementById('quoteMovieBadge');
-  const sessionCount = document.getElementById('sessionCount');
-
-  // Diary Elements
-  const diaryDrawer = document.getElementById('diaryDrawer');
-  const diaryOverlay = document.getElementById('diaryOverlay');
-  const diaryList = document.getElementById('diaryList');
-  const diaryFilters = document.getElementById('diaryFilters');
-  const closeDiaryBtn = document.getElementById('closeDiaryBtn');
-
-  // Save Modal Elements
-  const saveModalOverlay = document.getElementById('saveModalOverlay');
-  const closeSaveModalBtn = document.getElementById('closeSaveModalBtn');
-  const cancelSaveBtn = document.getElementById('cancelSaveBtn');
-  const confirmSaveBtn = document.getElementById('confirmSaveBtn');
-  const saveModalQuoteText = document.getElementById('saveModalQuoteText');
-  const saveNoteText = document.getElementById('saveNoteText');
-
-  const toastContainer = document.getElementById('toastContainer');
-
-  // Initialize
-  const init = async () => {
-    initStarfieldCanvas();
-    if (state.token && state.user) {
-      const isValid = await verifySession();
-      if (isValid) {
-        showUnlockedView();
-        await fetchDiaryEntries();
-        generateQuote();
-      } else {
-        showLockedView();
-      }
-    } else {
-      showLockedView();
+// Dynamically target local development or production backend
+const API_BASE_URL = (() => {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || window.location.protocol === 'file:') {
+        return (window.location.port ? `${window.location.protocol}//${window.location.hostname}:${window.location.port}` : 'http://localhost:3000');
     }
-  };
+    return window.location.origin;
+})();
 
-  // View Switchers & Corner Email Update
-  const showLockedView = () => {
-    lockedView.classList.remove('hidden');
-    unlockedApp.classList.add('hidden');
+let selectedMoon = 'full';
+let activeCategory = 'All';
+let inputMode = 'feeling'; 
+let authMode = 'login'; 
+let isSubmitting = false; 
 
-    navControls.innerHTML = `
-      <span class="corner-user-badge" style="background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: var(--text-secondary);">
-        <i class="fa-solid fa-lock"></i> Access Locked
-      </span>
-    `;
-  };
+const generatedQuoteHistory = [];
 
-  const showUnlockedView = () => {
-    lockedView.classList.add('hidden');
-    unlockedApp.classList.remove('hidden');
+$(document).ready(function() {
 
-    // Display user email cleanly in the top right corner!
-    const userEmailStr = state.user ? state.user.email : 'User';
-    navControls.innerHTML = `
-      <span class="corner-user-badge" title="Logged in account">
-        <i class="fa-solid fa-circle-user"></i> ${escapeHTML(userEmailStr)}
-      </span>
-      <button class="nav-btn" id="openDiaryBtn">
-        <i class="fa-solid fa-book-bookmark"></i>
-        <span>Diary</span>
-        <span class="diary-count-badge" id="diaryCount">${state.diaryEntries.length}</span>
-      </button>
-      <button class="logout-btn" id="logoutBtn" title="Sign out">
-        <i class="fa-solid fa-right-from-bracket"></i> Logout
-      </button>
-    `;
-
-    document.getElementById('logoutBtn')?.addEventListener('click', logout);
-    document.getElementById('openDiaryBtn')?.addEventListener('click', () => toggleDiary(true));
-  };
-
-  // Lock Screen Auth Handlers
-  lockLoginTab.addEventListener('click', () => {
-    isLockAuthModeLogin = true;
-    lockLoginTab.classList.add('active');
-    lockSignupTab.classList.remove('active');
-    lockAuthSubmitBtn.querySelector('span').textContent = 'Sign In to Access App';
-    lockAuthErrorMsg.classList.add('hidden');
-  });
-
-  lockSignupTab.addEventListener('click', () => {
-    isLockAuthModeLogin = false;
-    lockSignupTab.classList.add('active');
-    lockLoginTab.classList.remove('active');
-    lockAuthSubmitBtn.querySelector('span').textContent = 'Create Account & Unlock';
-    lockAuthErrorMsg.classList.add('hidden');
-  });
-
-  lockAuthForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const email = lockAuthEmail.value.trim();
-    const password = lockAuthPassword.value.trim();
-
-    if (!email || !password) return;
-
-    lockAuthSubmitBtn.disabled = true;
-    lockAuthSubmitBtn.querySelector('span').textContent = 'Authenticating...';
-    lockAuthErrorMsg.classList.add('hidden');
-
-    const endpoint = isLockAuthModeLogin ? '/api/auth/login' : '/api/auth/signup';
-
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      const data = await response.json();
-
-      if (response.ok && data.token) {
-        state.token = data.token;
-        state.user = data.user;
-        localStorage.setItem('moon_auth_token', data.token);
-        localStorage.setItem('moon_user', JSON.stringify(data.user));
-
-        showToast(`✨ Welcome, ${state.user.email}! Access unlocked.`);
-        showUnlockedView();
-        await fetchDiaryEntries();
-        generateQuote();
-      } else {
-        lockAuthErrorMsg.textContent = data.error || 'Authentication failed';
-        lockAuthErrorMsg.classList.remove('hidden');
-      }
-    } catch (err) {
-      console.error('Auth error:', err);
-      lockAuthErrorMsg.textContent = 'Server connection failed. Please try again.';
-      lockAuthErrorMsg.classList.remove('hidden');
-    } finally {
-      lockAuthSubmitBtn.disabled = false;
-      lockAuthSubmitBtn.querySelector('span').textContent = isLockAuthModeLogin ? 'Sign In to Access App' : 'Create Account & Unlock';
+    // ==========================================
+    // 0. Navigation Engine (Section Switcher)
+    // ==========================================
+    function navigateTo(targetSection) {
+        const sections = ['#landing-section', '#auth-section', '#gateway-section', '#dashboard-section', '#diary-section'];
+        sections.forEach(s => {
+            if (s === `#${targetSection}-section`) {
+                $(s).removeClass('d-none').hide().fadeIn(300);
+            } else {
+                $(s).addClass('d-none');
+            }
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  });
 
-  const verifySession = async () => {
-    try {
-      const res = await fetch('/api/auth/me', {
-        headers: { 'Authorization': `Bearer ${state.token}` }
-      });
-      if (!res.ok) {
-        logout();
-        return false;
-      }
-      return true;
-    } catch (err) {
-      console.warn(err);
-      return false;
+    // ==========================================
+    // 1. UI Helper: Popup Toast Notifications
+    // ==========================================
+    function showNotification(message, type = 'success') {
+        const bgClass = type === 'success' ? 'bg-success' : 'bg-danger';
+        const icon = type === 'success' ? '✓' : '⚠️';
+
+        $('.auth-toast').remove();
+
+        const toastHtml = `
+            <div class="auth-toast ${bgClass} text-white shadow-lg rounded p-3 position-fixed top-0 end-0 m-4" 
+                 style="z-index: 9999; min-width: 280px; display: none;">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <span class="me-2 fs-5">${icon}</span>
+                        <span>${message}</span>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white ms-3 toast-close"></button>
+                </div>
+            </div>
+        `;
+
+        $('body').append(toastHtml);
+        const $toast = $('.auth-toast');
+        
+        $toast.fadeIn(300);
+
+        const timer = setTimeout(() => {
+            $toast.fadeOut(300, function() { $(this).remove(); });
+        }, 3500);
+
+        $toast.find('.toast-close').on('click', function() {
+            clearTimeout(timer);
+            $toast.fadeOut(200, function() { $(this).remove(); });
+        });
     }
-  };
 
-  const logout = () => {
-    state.token = null;
-    state.user = null;
-    state.diaryEntries = [];
-    localStorage.removeItem('moon_auth_token');
-    localStorage.removeItem('moon_user');
-    showLockedView();
-    showToast('Logged out successfully.');
-  };
+    // ==========================================
+    // 2. Authentication Engine & Session State
+    // ==========================================
+    checkExistingSession();
 
-  // Moon Phase Switch
-  const setMoonPhase = (phase) => {
-    state.moonPhase = phase;
-    document.body.className = `theme-${phase}`;
-
-    if (phase === 'full') {
-      fullMoonCard.classList.add('active');
-      crescentMoonCard.classList.remove('active');
-      if (['Solitude', 'Melancholy', 'Longing', 'Introspection'].includes(state.category)) {
-        setCategory('Clarity');
-      }
-    } else {
-      crescentMoonCard.classList.add('active');
-      fullMoonCard.classList.remove('active');
-      if (['Clarity', 'Wholeness', 'Existential', 'Absurdism'].includes(state.category)) {
-        setCategory('Solitude');
-      }
-    }
-    showToast(`Switched to ${phase === 'full' ? '🌕 Full Moon' : '🌙 Crescent Moon'} mode.`);
-  };
-
-  fullMoonCard?.addEventListener('click', () => setMoonPhase('full'));
-  crescentMoonCard?.addEventListener('click', () => setMoonPhase('crescent'));
-
-  // Category Pills
-  const setCategory = (cat) => {
-    state.category = cat;
-    document.querySelectorAll('.pill-btn').forEach(btn => {
-      if (btn.getAttribute('data-cat') === cat) btn.classList.add('active');
-      else btn.classList.remove('active');
-    });
-  };
-
-  categoryPills?.addEventListener('click', (e) => {
-    const pill = e.target.closest('.pill-btn');
-    if (pill) setCategory(pill.getAttribute('data-cat'));
-  });
-
-  // Movie Mode Toggle Pill
-  movieModeBtn?.addEventListener('click', () => {
-    state.isMovieMode = !state.isMovieMode;
-    if (state.isMovieMode) {
-      movieModeBtn.classList.add('active');
-      inputFieldWrap?.classList.add('movie-active');
-      userInputText.placeholder = 'Enter movie title (e.g. Interstellar, Eternal Sunshine)...';
-      suggestionsContainer.classList.add('hidden');
-      movieSuggestionsContainer.classList.remove('hidden');
-      showToast('🎥 Movie Mode Activated');
-    } else {
-      movieModeBtn.classList.remove('active');
-      inputFieldWrap?.classList.remove('movie-active');
-      userInputText.placeholder = 'What is in your heart tonight? (or movie title in Movie Mode)...';
-      movieSuggestionsContainer.classList.add('hidden');
-      suggestionsContainer.classList.remove('hidden');
-    }
-  });
-
-  // Suggestion Chip clicks
-  document.querySelectorAll('.sugg-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      userInputText.value = chip.getAttribute('data-val');
-      clearInputBtn.classList.add('visible');
-      userInputText.focus();
-    });
-  });
-
-  userInputText?.addEventListener('input', () => {
-    if (userInputText.value.trim().length > 0) clearInputBtn.classList.add('visible');
-    else clearInputBtn.classList.remove('visible');
-  });
-
-  clearInputBtn?.addEventListener('click', () => {
-    userInputText.value = '';
-    clearInputBtn.classList.remove('visible');
-    userInputText.focus();
-  });
-
-  // AI Quote Generation
-  const generateQuote = async () => {
-    if (!state.token) return;
-
-    state.userInput = userInputText.value.trim();
-    quoteBody.classList.add('hidden');
-    quoteLoader.classList.remove('hidden');
-
-    try {
-      const response = await fetch('/api/quotes/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          moonPhase: state.moonPhase,
-          category: state.category,
-          userInput: state.userInput,
-          isMovieMode: state.isMovieMode,
-          history: state.sessionHistory
-        })
-      });
-
-      const data = await response.json();
-      if (data.quote) {
-        state.currentQuote = data;
-        if (!state.sessionHistory.includes(data.quote)) {
-          state.sessionHistory.push(data.quote);
+    function checkExistingSession() {
+        const activeUser = localStorage.getItem('nightSkyActiveUser');
+        if (activeUser) {
+            updateUserBadges(activeUser);
+            // Direct to Moon Selection Gateway on active session
+            navigateTo('gateway');
+        } else {
+            // Display attractive Landing Page if unauthenticated
+            navigateTo('landing');
         }
-        renderQuoteCard(data);
-      }
-    } catch (err) {
-      console.error('Quote gen error:', err);
-      showToast('⚠️ Could not connect to AI server.', 'error');
-    } finally {
-      quoteLoader.classList.add('hidden');
-      quoteBody.classList.remove('hidden');
-    }
-  };
-
-  const renderQuoteCard = (quoteData) => {
-    quoteText.textContent = `"${quoteData.quote}"`;
-    quoteAuthor.textContent = `— ${quoteData.author}`;
-    quotePhaseBadge.textContent = quoteData.moonPhase === 'full' ? '🌕 Full Moon' : '🌙 Crescent Moon';
-    quoteCategoryBadge.textContent = quoteData.category;
-
-    if (quoteData.isMovieMode && quoteData.userInput) {
-      quoteMovieBadge.textContent = `🎥 ${quoteData.userInput}`;
-      quoteMovieBadge.classList.remove('hidden');
-    } else {
-      quoteMovieBadge.classList.add('hidden');
     }
 
-    sessionCount.textContent = state.sessionHistory.length;
-  };
+    function updateUserBadges(email) {
+        $('#user-badge, #gateway-user-badge').text(`👤 ${email}`);
+    }
 
-  generateQuoteBtn?.addEventListener('click', generateQuote);
-  refreshQuoteBtn?.addEventListener('click', generateQuote);
+    function loginUser(email) {
+        localStorage.setItem('nightSkyActiveUser', email);
+        updateUserBadges(email);
+        $('#auth-email').val('');
+        $('#auth-password').val('');
+        // Direct to Moon Selection Page immediately post-login
+        navigateTo('gateway');
+    }
 
-  copyQuoteBtn?.addEventListener('click', () => {
-    if (!state.currentQuote) return;
-    navigator.clipboard.writeText(`"${state.currentQuote.quote}" ${quoteAuthor.textContent}`).then(() => {
-      showToast('✨ Copied to clipboard!');
+    function logoutUser() {
+        localStorage.removeItem('nightSkyActiveUser');
+        showNotification('You have logged out.', 'success');
+        navigateTo('landing');
+    }
+
+    // Landing Page Action Triggers
+    $('#landing-login-btn').on('click', function() {
+        const activeUser = localStorage.getItem('nightSkyActiveUser');
+        if (activeUser) {
+            navigateTo('gateway');
+        } else {
+            navigateTo('auth');
+        }
     });
-  });
 
-  // Save Modal & Diary Sync
-  saveQuoteBtn?.addEventListener('click', () => {
-    if (!state.currentQuote) return;
-    saveModalQuoteText.textContent = `"${state.currentQuote.quote}"`;
-    saveNoteText.value = '';
-    saveModalOverlay.classList.remove('hidden');
-  });
+    $('#landing-explore-btn').on('click', function() {
+        const activeUser = localStorage.getItem('nightSkyActiveUser');
+        if (activeUser) {
+            navigateTo('gateway');
+        } else {
+            navigateTo('auth');
+        }
+    });
 
-  closeSaveModalBtn?.addEventListener('click', () => saveModalOverlay.classList.add('hidden'));
-  cancelSaveBtn?.addEventListener('click', () => saveModalOverlay.classList.add('hidden'));
+    // Auth Navigation & Toggle
+    $('#auth-back-home-btn').on('click', function() {
+        navigateTo('landing');
+    });
 
-  confirmSaveBtn?.addEventListener('click', async () => {
-    if (!state.currentQuote) return;
+    $(document).on('click', '#auth-toggle-link', function(e) {
+        e.preventDefault();
+        if (isSubmitting) return;
 
-    try {
-      const response = await fetch('/api/diary', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${state.token}`
-        },
-        body: JSON.stringify({
-          quote: state.currentQuote.quote,
-          author: state.currentQuote.author,
-          moonPhase: state.currentQuote.moonPhase,
-          category: state.currentQuote.category,
-          movieTitle: state.currentQuote.isMovieMode ? state.currentQuote.userInput : null,
-          isMovieMode: state.currentQuote.isMovieMode,
-          userInput: state.currentQuote.userInput,
-          note: saveNoteText.value.trim()
+        $('#auth-error').addClass('d-none').text('');
+        
+        if (authMode === 'login') {
+            authMode = 'signup';
+            $('#auth-title').text('Create an Account');
+            $('#auth-subtitle').text('Join the night sky to save your emotional echoes');
+            $('#auth-submit-btn').text('Sign Up');
+            $('#auth-toggle-text').html('Already have an account? <a href="#" id="auth-toggle-link" class="text-warning">Login</a>');
+        } else {
+            authMode = 'login';
+            $('#auth-title').text('Login to Night Sky');
+            $('#auth-subtitle').text('Enter your details to access your personal Moon Diary');
+            $('#auth-submit-btn').text('Login');
+            $('#auth-toggle-text').html('Don\'t have an account? <a href="#" id="auth-toggle-link" class="text-warning">Sign Up</a>');
+        }
+    });
+
+    // Form Submission
+    $('#auth-form').on('submit', async function(e) {
+        e.preventDefault();
+        if (isSubmitting) return;
+
+        const email = $('#auth-email').val().trim().toLowerCase();
+        const password = $('#auth-password').val().trim();
+        const $btn = $('#auth-submit-btn');
+        const errorEl = $('#auth-error');
+
+        errorEl.addClass('d-none').text('');
+
+        if (!email || !password) {
+            errorEl.removeClass('d-none').text('Please fill in all required fields.');
+            return;
+        }
+
+        if (password.length < 6) {
+            errorEl.removeClass('d-none').text('Password must be at least 6 characters long.');
+            return;
+        }
+
+        isSubmitting = true;
+        $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span> Processing...');
+
+        const endpoint = authMode === 'signup' ? '/api/signup' : '/api/login';
+
+        try {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => null);
+                throw new Error(errorData?.message || `Authentication failed (${response.status})`);
+            }
+
+            const data = await response.json();
+            showNotification(data.message || 'Success!', 'success');
+            loginUser(data.email || email);
+
+        } catch (err) {
+            console.error('Auth error:', err);
+            errorEl.removeClass('d-none').text(err.message || 'Cannot connect to server.');
+            showNotification(err.message || 'Server connection failed.', 'error');
+        } finally {
+            isSubmitting = false;
+            $btn.prop('disabled', false).text(authMode === 'login' ? 'Login' : 'Sign Up');
+        }
+    });
+
+    // Logout Handlers
+    $('#logout-btn, #gateway-logout-btn').on('click', function() {
+        logoutUser();
+    });
+
+    // ==========================================
+    // 3. Moon Gateway Controls & Back Buttons
+    // ==========================================
+    $('#gateway-back-home-btn').on('click', function() {
+        navigateTo('landing');
+    });
+
+    $('.moon-card').on('click', function() {
+        selectedMoon = $(this).data('moon');
+        navigateTo('dashboard');
+        generateLiveAIQuote();
+    });
+
+    $('#dashboard-back-moon-btn, #back-to-moons').on('click', function() {
+        navigateTo('gateway');
+    });
+
+    // Diary View Controls & Back Buttons
+    $('#view-diary-btn').on('click', function() {
+        navigateTo('diary');
+        loadUserDiary();
+    });
+
+    $('#close-diary-btn, #close-diary-btn-top').on('click', function() {
+        navigateTo('dashboard');
+    });
+
+    // Category Buttons
+    $('.cat-btn').on('click', function() {
+        $('.cat-btn').removeClass('active');
+        $(this).addClass('active');
+        activeCategory = $(this).data('category');
+        generateLiveAIQuote();
+    });
+
+    // Movie Mode Toggle
+    $('#toggle-movie-mode').on('click', function() {
+        if (inputMode === 'feeling') {
+            inputMode = 'movie';
+            $(this).text('💭 Switch to Feeling Mode');
+            $('#grok-feeling-input').attr('placeholder', 'e.g., Interstellar, Dead Poets Society, Fight Club...');
+        } else {
+            inputMode = 'feeling';
+            $(this).text('🎬 Switch to Movie Mode');
+            $('#grok-feeling-input').attr('placeholder', 'e.g., I feel like a ghost drifting through a crowded room...');
+        }
+    });
+
+    // ==========================================
+    // 4. Personal Moon Diary Management
+    // ==========================================
+    $('#save-quote-btn').on('click', async function() {
+        const activeUser = localStorage.getItem('nightSkyActiveUser');
+        
+        if (!activeUser) {
+            showNotification('Please log in to save quotes to your diary.', 'error');
+            navigateTo('auth');
+            return;
+        }
+
+        const quote = $('#quote-text').text().replace(/^"|"$/g, '').trim();
+        const author = $('#quote-author').text().replace(/^—\s*/, '').trim();
+
+        if (!quote || quote.includes('Gaze into the cosmos')) {
+            showNotification('No valid quote available to save.', 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/diary/save`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: activeUser, quote, author, moon: selectedMoon })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => null);
+                throw new Error(errorData?.message || `Server error (${response.status})`);
+            }
+
+            const data = await response.json();
+            showNotification(data.message || 'Quote saved to your personal diary!', 'success');
+
+        } catch (err) {
+            console.error('Error saving quote:', err);
+            showNotification(err.message || 'Server error while saving quote.', 'error');
+        }
+    });
+
+    async function loadUserDiary() {
+        const activeUser = localStorage.getItem('nightSkyActiveUser');
+        if (!activeUser) return;
+
+        $('#diary-container').html('<div class="text-center text-muted p-4"><span class="spinner-border spinner-border-sm me-2"></span> Loading your entries...</div>');
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/diary?email=${encodeURIComponent(activeUser)}`);
+            
+            if (!response.ok) {
+                throw new Error(`Failed to retrieve diary (${response.status})`);
+            }
+
+            const quotes = await response.json();
+
+            if (quotes.length > 0) {
+                let html = '';
+                quotes.forEach(item => {
+                    html += `
+                        <div class="col-12 col-md-10" id="diary-item-${item._id}">
+                            <div class="card bg-dark text-white border-secondary mb-3 shadow-sm text-start">
+                                <div class="card-body p-4">
+                                    <p class="card-text fs-5">"${item.quote}"</p>
+                                    <div class="d-flex justify-content-between align-items-center mt-3">
+                                        <small class="text-warning">— ${item.author || 'Unknown'}</small>
+                                        <button class="btn btn-outline-danger btn-sm delete-quote-btn" data-id="${item._id}">
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                $('#diary-container').html(html);
+            } else {
+                $('#diary-container').html('<p class="text-muted text-center p-4">Your diary is empty. Start saving quotes from the night sky!</p>');
+            }
+        } catch (err) {
+            console.error('Error loading diary:', err);
+            $('#diary-container').html('<p class="text-danger text-center p-4">Unable to load diary entries from server.</p>');
+        }
+    }
+
+    $(document).on('click', '.delete-quote-btn', async function() {
+        const quoteId = $(this).data('id');
+        const activeUser = localStorage.getItem('nightSkyActiveUser');
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/diary/${quoteId}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: activeUser })
+            });
+
+            if (response.ok) {
+                $(`#diary-item-${quoteId}`).fadeOut(300, function() { $(this).remove(); });
+                showNotification('Quote removed from diary.', 'success');
+            } else {
+                showNotification('Failed to delete quote.', 'error');
+            }
+        } catch (err) {
+            console.error('Error deleting quote:', err);
+            showNotification('Server error while deleting.', 'error');
+        }
+    });
+
+    // ==========================================
+    // 5. AI Quote Generation Engine
+    // ==========================================
+    function generateLiveAIQuote(specificInput = null) {
+        $('#grok-loading').removeClass('d-none');
+
+        fetch(`${API_BASE_URL}/api/generate-quote`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                specificInput,
+                inputMode,
+                selectedMoon,
+                activeCategory,
+                generatedQuoteHistory
+            })
         })
-      });
+        .then(res => {
+            if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
+            return res.json();
+        })
+        .then(data => {
+            $('#grok-loading').addClass('d-none');
+            let quoteObj = null;
 
-      if (response.ok) {
-        showToast('📖 Saved to your Moon Diary!');
-        saveModalOverlay.classList.add('hidden');
-        await fetchDiaryEntries();
-      }
-    } catch (err) {
-      console.error('Save error:', err);
+            if (data?.choices?.[0]?.message?.content) {
+                const content = data.choices[0].message.content.trim();
+                try {
+                    quoteObj = JSON.parse(content);
+                } catch (err) {
+                    console.warn('Could not parse AI content as JSON, using raw content.', err);
+                    quoteObj = { quote: content, author: 'Night Sky Wisdom' };
+                }
+            }
+
+            if (quoteObj?.quote) {
+                generatedQuoteHistory.push(quoteObj.quote);
+                $('#quote-text').fadeOut(150, function() {
+                    $(this).text(`"${quoteObj.quote}"`).fadeIn(200);
+                });
+                $('#quote-author').fadeOut(150, function() {
+                    $(this).text(`— ${quoteObj.author || 'Unknown'}`).fadeIn(200);
+                });
+            } else {
+                showNotification('No quote was returned by the generator.', 'error');
+            }
+        })
+        .catch(err => {
+            $('#grok-loading').addClass('d-none');
+            console.error("API Error:", err);
+            showNotification("Failed to generate quote. Check backend server.", "error");
+        });
     }
-  });
 
-  const fetchDiaryEntries = async () => {
-    if (!state.token) return;
-    try {
-      const response = await fetch('/api/diary', {
-        headers: { 'Authorization': `Bearer ${state.token}` }
-      });
-      const data = await response.json();
-      if (response.ok && data.entries) {
-        state.diaryEntries = data.entries;
-        const diaryCountBadge = document.getElementById('diaryCount');
-        if (diaryCountBadge) diaryCountBadge.textContent = state.diaryEntries.length;
-        renderDiaryList();
-      }
-    } catch (err) {
-      console.error('Fetch diary error:', err);
-    }
-  };
-
-  const renderDiaryList = () => {
-    const filtered = state.diaryEntries.filter(entry => {
-      if (state.diaryFilter === 'full') return entry.moonPhase === 'full';
-      if (state.diaryFilter === 'crescent') return entry.moonPhase === 'crescent';
-      if (state.diaryFilter === 'movie') return entry.isMovieMode;
-      return true;
+    // Dynamic UI Input Triggers
+    $('#next-quote-btn').on('click', () => generateLiveAIQuote($('#grok-feeling-input').val().trim() || null));
+    $('#grok-submit-btn').on('click', () => {
+        const val = $('#grok-feeling-input').val().trim();
+        generateLiveAIQuote(val || null);
     });
-
-    if (filtered.length === 0) {
-      diaryList.innerHTML = `<div class="diary-empty"><p>No saved entries in your diary.</p></div>`;
-      return;
-    }
-
-    diaryList.innerHTML = filtered.map(entry => `
-      <div class="diary-item" data-id="${entry._id}">
-        <div class="diary-item-header">
-          <span>${entry.moonPhase === 'full' ? '🌕 Full' : '🌙 Crescent'} • ${entry.category}</span>
-          <span>${new Date(entry.createdAt).toLocaleDateString()}</span>
-        </div>
-        <p class="diary-item-quote">"${entry.quote}"</p>
-        <div class="diary-item-author">— ${entry.author}</div>
-        ${entry.note ? `<div class="diary-item-note">${escapeHTML(entry.note)}</div>` : ''}
-        <div class="diary-item-footer">
-          ${entry.movieTitle ? `<span class="mini-tag movie-tag">🎥 ${escapeHTML(entry.movieTitle)}</span>` : '<span></span>'}
-          <button class="delete-btn" onclick="deleteDiaryItem('${entry._id}')"><i class="fa-regular fa-trash-can"></i> Delete</button>
-        </div>
-      </div>
-    `).join('');
-  };
-
-  window.deleteDiaryItem = async (entryId) => {
-    if (!state.token) return;
-    if (!confirm('Delete this diary entry?')) return;
-    try {
-      const response = await fetch(`/api/diary/${entryId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${state.token}` }
-      });
-      if (response.ok) {
-        showToast('🗑️ Entry deleted.');
-        state.diaryEntries = state.diaryEntries.filter(e => e._id !== entryId);
-        const diaryCountBadge = document.getElementById('diaryCount');
-        if (diaryCountBadge) diaryCountBadge.textContent = state.diaryEntries.length;
-        renderDiaryList();
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  diaryFilters?.addEventListener('click', (e) => {
-    const btn = e.target.closest('.filter-btn');
-    if (btn) {
-      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.diaryFilter = btn.getAttribute('data-filter');
-      renderDiaryList();
-    }
-  });
-
-  const toggleDiary = (show) => {
-    if (show) {
-      diaryDrawer.classList.remove('hidden');
-      diaryOverlay.classList.remove('hidden');
-      fetchDiaryEntries();
-    } else {
-      diaryDrawer.classList.add('hidden');
-      diaryOverlay.classList.add('hidden');
-    }
-  };
-
-  closeDiaryBtn?.addEventListener('click', () => toggleDiary(false));
-  diaryOverlay?.addEventListener('click', () => toggleDiary(false));
-
-  const showToast = (msg) => {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = msg;
-    toastContainer.appendChild(toast);
-    setTimeout(() => {
-      toast.style.opacity = '0';
-      setTimeout(() => toast.remove(), 300);
-    }, 2800);
-  };
-
-  const escapeHTML = (str) => {
-    return str.replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag));
-  };
-
-  function initStarfieldCanvas() {
-    const canvas = document.getElementById('starCanvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    let width = canvas.width = window.innerWidth;
-    let height = canvas.height = window.innerHeight;
-
-    window.addEventListener('resize', () => {
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
-    });
-
-    const stars = Array.from({ length: 80 }, () => ({
-      x: Math.random() * width,
-      y: Math.random() * height,
-      radius: Math.random() * 1.2 + 0.3,
-      alpha: Math.random(),
-      speed: Math.random() * 0.01 + 0.003
-    }));
-
-    function animate() {
-      ctx.clearRect(0, 0, width, height);
-      stars.forEach(star => {
-        star.alpha += star.speed;
-        if (star.alpha > 0.9 || star.alpha < 0.2) star.speed = -star.speed;
-        ctx.beginPath();
-        ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha})`;
-        ctx.fill();
-      });
-      requestAnimationFrame(animate);
-    }
-    animate();
-  }
-
-  init();
 });
