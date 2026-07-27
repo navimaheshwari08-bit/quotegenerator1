@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Every Feeling Has a Meaning — AI Quote & Moon Diary</title>
+  <meta name="description" content="A mood-driven AI quote generator and celestial diary powered by Groq LLaMA 3.3 70B.">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@300;400;500;600;700&family=Newsreader:ital,opsz,wght@1,6..72,400;1,6..72,500&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="theme-full">
+  <!-- Minimal Ambient Background -->
+  <canvas id="starCanvas"></canvas>
+
+  <div class="app-container">
+    <!-- Navbar Header -->
+    <header class="navbar">
+      <div class="brand">
+        <span class="brand-icon">🌙</span>
+        <span class="brand-title">Every Feeling Has a Meaning</span>
+      </div>
+
+      <!-- Corner User & Auth Controls -->
+      <div class="nav-controls" id="navControls">
+        <!-- Dynamic: Shows Sign In button when logged out; User Email + Logout + Diary when logged in -->
+      </div>
+    </header>
+
+    <!-- LOCKED ACCESS VIEW (Shown when user is NOT logged in) -->
+    <section class="locked-view" id="lockedView">
+      <div class="lock-card">
+        <div class="lock-icon">🔒</div>
+        <h2>Welcome to Your Celestial Space</h2>
+        <p>Please sign in or create an account to unlock mood-driven AI quotes, Movie Mode, and your personal Moon Diary.</p>
+
+        <!-- Inline Sign In / Signup Form -->
+        <div class="auth-tabs">
+          <button class="auth-tab-btn active" id="lockLoginTab">Sign In</button>
+          <button class="auth-tab-btn" id="lockSignupTab">Create Account</button>
+        </div>
+
+        <form id="lockAuthForm" class="auth-form">
+          <div class="auth-error-msg hidden" id="lockAuthErrorMsg"></div>
+          
+          <div class="input-wrap">
+            <label for="lockAuthEmail">Email Address</label>
+            <input type="email" id="lockAuthEmail" required placeholder="you@example.com">
+          </div>
+
+          <div class="input-wrap">
+            <label for="lockAuthPassword">Password</label>
+            <input type="password" id="lockAuthPassword" required minlength="6" placeholder="••••••••">
+          </div>
+
+          <button type="submit" class="btn-primary auth-btn-full" id="lockAuthSubmitBtn">
+            <span>Sign In to Access App</span>
+          </button>
+
+          <p class="lock-footnote">
+            <i class="fa-solid fa-shield-halved"></i> Passwords are bcrypt-hashed & stored securely.
+          </p>
+        </form>
+      </div>
+    </section>
+
+    <!-- UNLOCKED MAIN APP CONTENT (Hidden when user is NOT logged in) -->
+    <main class="main-layout hidden" id="unlockedApp">
+      <!-- Minimal Moon Phase Switcher -->
+      <section class="moon-selector-wrap">
+        <div class="phase-toggle-container">
+          <button class="phase-btn active" id="fullMoonCard" data-phase="full">
+            <span class="moon-symbol">🌕</span>
+            <div class="phase-label">
+              <strong>Full Moon</strong>
+              <small>Clarity & Existential Truth</small>
+            </div>
+          </button>
+
+          <button class="phase-btn" id="crescentMoonCard" data-phase="crescent">
+            <span class="moon-symbol">🌙</span>
+            <div class="phase-label">
+              <strong>Crescent Moon</strong>
+              <small>Solitude & Melancholy</small>
+            </div>
+          </button>
+        </div>
+      </section>
+
+      <!-- Controls Card -->
+      <section class="controls-card">
+        <div class="controls-header">
+          <div class="category-pills" id="categoryPills">
+            <button class="pill-btn active" data-cat="Clarity">Clarity</button>
+            <button class="pill-btn" data-cat="Wholeness">Wholeness</button>
+            <button class="pill-btn" data-cat="Solitude">Solitude</button>
+            <button class="pill-btn" data-cat="Melancholy">Melancholy</button>
+            <button class="pill-btn" data-cat="Love">Love</button>
+            <button class="pill-btn" data-cat="Existential">Existential</button>
+            <button class="pill-btn" data-cat="Hope">Hope</button>
+          </div>
+
+          <!-- Movie Mode Toggle Pill -->
+          <button class="movie-pill-toggle" id="movieModeBtn">
+            <i class="fa-solid fa-film"></i>
+            <span>Movie Mode</span>
+          </button>
+        </div>
+
+        <div class="input-row">
+          <div class="input-field-wrap">
+            <input type="text" id="userInputText" placeholder="What is in your heart tonight? (or movie title in Movie Mode)..." autocomplete="off">
+            <button class="clear-input-btn" id="clearInputBtn" title="Clear"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <button class="generate-btn" id="generateQuoteBtn">
+            <i class="fa-solid fa-sparkles"></i>
+            <span>Generate Quote</span>
+          </button>
+        </div>
+
+        <!-- Quick Prompts / Movie Suggestions -->
+        <div class="suggestions-row" id="suggestionsContainer">
+          <span class="sugg-hint">Suggestions:</span>
+          <button class="sugg-chip" data-val="Stargazing alone in silence">✨ Stargazing alone</button>
+          <button class="sugg-chip" data-val="Missing someone far away">🌌 Missing someone</button>
+          <button class="sugg-chip" data-val="Late night quiet reflections">🌙 Quiet reflections</button>
+        </div>
+
+        <div class="suggestions-row hidden" id="movieSuggestionsContainer">
+          <span class="sugg-hint">Films:</span>
+          <button class="sugg-chip movie-chip" data-val="Interstellar">🚀 Interstellar</button>
+          <button class="sugg-chip movie-chip" data-val="Eternal Sunshine of the Spotless Mind">🧠 Eternal Sunshine</button>
+          <button class="sugg-chip movie-chip" data-val="Inception">🌀 Inception</button>
+          <button class="sugg-chip movie-chip" data-val="La La Land">🎷 La La Land</button>
+        </div>
+      </section>
+
+      <!-- Minimal Quote Display Card -->
+      <section class="quote-card" id="quoteCard">
+        <div class="quote-loader hidden" id="quoteLoader">
+          <div class="minimal-spinner"></div>
+          <p>Generating your AI quote...</p>
+        </div>
+
+        <div class="quote-content" id="quoteBody">
+          <p class="quote-text" id="quoteText">"The moon does not fight the darkness, nor does it hide from it. It simply shines with whatever light it has gathered."</p>
+          <div class="quote-meta">
+            <span class="quote-author" id="quoteAuthor">— Marcus Aurelius & The Lunar Mind</span>
+            <div class="quote-tags">
+              <span class="mini-tag" id="quotePhaseBadge">🌕 Full Moon</span>
+              <span class="mini-tag" id="quoteCategoryBadge">Clarity</span>
+              <span class="mini-tag movie-tag hidden" id="quoteMovieBadge">🎥 Movie</span>
+            </div>
+          </div>
+
+          <div class="quote-footer">
+            <span class="session-badge">Session history: <strong id="sessionCount">1</strong> quotes</span>
+            <div class="action-buttons">
+              <button class="icon-action-btn" id="copyQuoteBtn" title="Copy quote">
+                <i class="fa-regular fa-copy"></i> Copy
+              </button>
+              <button class="icon-action-btn save" id="saveQuoteBtn" title="Save quote to Moon Diary">
+                <i class="fa-regular fa-bookmark"></i> Save to Diary
+              </button>
+              <button class="icon-action-btn" id="refreshQuoteBtn" title="Get next quote">
+                <i class="fa-solid fa-rotate-right"></i> Next
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Moon Diary Drawer -->
+    <div class="diary-backdrop hidden" id="diaryOverlay"></div>
+    <aside class="diary-drawer hidden" id="diaryDrawer">
+      <div class="drawer-header">
+        <h3><i class="fa-solid fa-book-bookmark"></i> Moon Diary</h3>
+        <button class="close-btn" id="closeDiaryBtn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="drawer-filters" id="diaryFilters">
+        <button class="filter-btn active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="full">🌕 Full</button>
+        <button class="filter-btn" data-filter="crescent">🌙 Crescent</button>
+        <button class="filter-btn" data-filter="movie">🎥 Movies</button>
+      </div>
+
+      <div class="diary-list" id="diaryList">
+        <div class="diary-empty" id="diaryEmpty">
+          <p>Your Moon Diary is empty. Save quotes to build your journal.</p>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Save Quote Note Modal -->
+    <div class="modal-overlay hidden" id="saveModalOverlay">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h4>Save to Moon Diary</h4>
+          <button class="close-btn" id="closeSaveModalBtn"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <p class="modal-quote-snippet" id="saveModalQuoteText">"..."</p>
+        <div class="input-wrap">
+          <label for="saveNoteText">Personal reflection (optional):</label>
+          <textarea id="saveNoteText" rows="3" placeholder="Notes on how this feeling resonated..."></textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary" id="cancelSaveBtn">Cancel</button>
+          <button class="btn-primary" id="confirmSaveBtn">Save Entry</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
