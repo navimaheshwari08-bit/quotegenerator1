@@ -10,7 +10,7 @@ import { connectDB, getDBStatus } from './config/db.js';
 import User from './models/User.js';
 import DiaryEntry from './models/DiaryEntry.js';
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -132,6 +132,13 @@ const CLASSIC_PHILOSOPHERS = [
 function isCompleteSentence(text) {
   if (!text || typeof text !== 'string') return false;
   const trimmed = text.trim();
+  const lower = trimmed.toLowerCase();
+  
+  // Filter out forbidden words per user request (only allah related)
+  if (lower.includes('allah')) {
+    return false;
+  }
+  
   return /[.!?"]$/.test(trimmed) && trimmed.length >= 15;
 }
 
@@ -178,13 +185,29 @@ async function fetchRealTimeQuoteOnline() {
 }
 
 // Live External Fetcher 2: Real-time Wikiquote API for Movies & Dialogue
-async function fetchRealTimeWikiquoteMovie(movieTitle) {
+async function fetchRealTimeWikiquoteMovie(movieTitle, historySet) {
   try {
+    const searchUrl = `https://en.wikiquote.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(movieTitle)}&utf8=&format=json`;
+    
+    const searchController = new AbortController();
+    const searchTimeoutId = setTimeout(() => searchController.abort(), 3500);
+    const searchRes = await fetch(searchUrl, { signal: searchController.signal });
+    clearTimeout(searchTimeoutId);
+    
+    const searchData = await searchRes.json();
+    
+    let targetTitle = `${movieTitle} (film)`;
+    if (searchData?.query?.search?.length > 0) {
+      const results = searchData.query.search;
+      const filmMatch = results.find(r => r.title.toLowerCase().includes('(film)') || r.title.toLowerCase() === movieTitle.toLowerCase());
+      targetTitle = filmMatch ? filmMatch.title : results[0].title;
+    }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3500);
-    const searchUrl = `https://en.wikiquote.org/w/api.php?action=query&titles=${encodeURIComponent(movieTitle)}_(film)&prop=extracts&format=json&explaintext=true`;
+    const pageUrl = `https://en.wikiquote.org/w/api.php?action=query&titles=${encodeURIComponent(targetTitle)}&prop=extracts&format=json&explaintext=true`;
 
-    const res = await fetch(searchUrl, { signal: controller.signal });
+    const res = await fetch(pageUrl, { signal: controller.signal });
     clearTimeout(timeoutId);
 
     if (res.ok) {
@@ -204,7 +227,12 @@ async function fetchRealTimeWikiquoteMovie(movieTitle) {
             if (trimmed.startsWith('== ') && trimmed.endsWith(' ==')) {
               currentCharacter = trimmed.replace(/^==\s*|\s*==$/g, '').trim();
             } else if (trimmed.length > 25 && isCompleteSentence(trimmed) && !trimmed.startsWith('*') && !trimmed.startsWith('=')) {
-              candidateQuotes.push({ quote: trimmed, author: `${currentCharacter} (${movieTitle})` });
+              let cleanQuote = trimmed.replace(/\[.*?\]\s*/g, '').trim();
+              if (isCompleteSentence(cleanQuote)) {
+                if (!historySet || !historySet.has(cleanQuote.toLowerCase())) {
+                  candidateQuotes.push({ quote: cleanQuote, author: `${currentCharacter} (${targetTitle.replace(' (film)', '')})` });
+                }
+              }
             }
           }
 
@@ -231,12 +259,13 @@ app.post(['/api/generate-quote', '/api/quotes/generate'], async (req, res) => {
 
     const isMovieMode = (inputMode === 'movie' || (specificInput && inputMode !== 'feeling'));
     const cleanMovieInput = specificInput ? specificInput.trim() : '';
+    const historySet = new Set(generatedQuoteHistory.map(q => typeof q === 'string' ? q.toLowerCase() : String(q.quote || q).toLowerCase()));
 
     // -----------------------------------------------------------------------
     // STEP 1: If Movie Mode, try Live Real-Time Wikiquote API Fetching
     // -----------------------------------------------------------------------
     if (isMovieMode && cleanMovieInput) {
-      const liveMovieResult = await fetchRealTimeWikiquoteMovie(cleanMovieInput);
+      const liveMovieResult = await fetchRealTimeWikiquoteMovie(cleanMovieInput, historySet);
       if (liveMovieResult && isCompleteSentence(liveMovieResult.quote)) {
         quoteText = liveMovieResult.quote;
         quoteAuthor = liveMovieResult.author;
@@ -260,17 +289,24 @@ STRICT RULES:
 1. The quote MUST be authentic dialogue from "${cleanMovieInput}".
 2. State the exact character who spoke it in author field (e.g., "Cooper (Interstellar)", "Tyler Durden", "John Keating").
 3. Must be a complete sentence ending with punctuation.
-4. JSON format: {"quote": "Complete quote text.", "author": "Character Name (Film Title)"}`;
+4. DO NOT include any quotes referencing "Allah".
+5. DO NOT repeat these past quotes: ${generatedQuoteHistory.slice(-5).join(" | ")}
+6. JSON format: {"quote": "Complete quote text.", "author": "Character Name (Film Title)"}`;
           userPrompt = `Fetch iconic dialogue for movie: "${cleanMovieInput}"`;
         } else {
           systemPrompt = `You are an old, profound philosopher for an app named "Every Feeling Has a Meaning".
-Your goal is to inspire the user with deep, melancholic, sad, meaningful, and pure-feeling wisdom inspired by classic philosophers (Marcus Aurelius, Friedrich Nietzsche, Arthur Schopenhauer, Albert Camus, Rainer Maria Rilke, Fernando Pessoa, Seneca, Rumi).
+The user will provide a word or phrase describing how they currently FEEL (e.g., "dead", "empty", "joyful", "lost").
+Your goal is to inspire the user with deep, melancholic, sad, meaningful, and pure-feeling wisdom about that exact EMOTION/FEELING. 
+Do NOT treat the user's input as an author's name or literal entity. It is a description of an emotional state.
 
 STRICT RULES:
-1. Generate ONE profound, complete quote matching Moon Phase (${selectedMoon.toUpperCase()}), Category (${activeCategory}), and Feeling ("${cleanMovieInput || 'silence of the night'}").
-2. State the exact philosopher or thinker name (or "The Night Sky" for original synthesis).
-3. JSON format: {"quote": "Complete quote text.", "author": "Philosopher Name"}`;
-          userPrompt = `Evoke an old philosopher quote for: ${cleanMovieInput || activeCategory}`;
+1. Generate ONE profound, complete quote about the feeling of "${cleanMovieInput || 'silence of the night'}".
+2. State the exact classic philosopher's name who inspired it (e.g., Marcus Aurelius, Nietzsche, Camus, Rilke, Seneca, Rumi) or "The Night Sky".
+3. DO NOT include any quotes referencing "Allah".
+4. DO NOT literally use words like "crescent" or "full" in the quote.
+5. DO NOT repeat these past quotes: ${generatedQuoteHistory.slice(-5).join(" | ")}
+6. JSON format: {"quote": "Complete quote text.", "author": "Philosopher Name"}`;
+          userPrompt = `The user feels: "${cleanMovieInput || activeCategory}". Provide a philosophical quote about this feeling.`;
         }
 
         const chatCompletion = await groq.chat.completions.create({
@@ -302,7 +338,7 @@ STRICT RULES:
     // -----------------------------------------------------------------------
     if (!quoteText && !isMovieMode) {
       const onlineQuote = await fetchRealTimeQuoteOnline();
-      if (onlineQuote && isCompleteSentence(onlineQuote.quote)) {
+      if (onlineQuote && isCompleteSentence(onlineQuote.quote) && !historySet.has(onlineQuote.quote.toLowerCase())) {
         quoteText = onlineQuote.quote;
         quoteAuthor = onlineQuote.author;
       }
@@ -316,7 +352,6 @@ STRICT RULES:
         quoteText = `Great stories do not fade when the screen goes dark; they linger in the quiet thoughts of those who marveled at them.`;
         quoteAuthor = `${cleanMovieInput} Cinema`;
       } else {
-        const historySet = new Set(generatedQuoteHistory.map(q => q.toLowerCase()));
         const available = CLASSIC_PHILOSOPHERS.filter(item => !historySet.has(item.quote.toLowerCase()));
         
         const selected = available.length > 0
