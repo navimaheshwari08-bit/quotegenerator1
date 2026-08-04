@@ -248,16 +248,22 @@ $(document).ready(function() {
         generateLiveAIQuote();
     });
 
-    // Movie Mode Toggle
-    $('#toggle-movie-mode').on('click', function() {
-        if (inputMode === 'feeling') {
-            inputMode = 'movie';
-            $(this).text('💭 Switch to Feeling Mode');
-            $('#grok-feeling-input').attr('placeholder', 'e.g., Interstellar, Dead Poets Society, Fight Club...');
+    // Input Mode Selection
+    $('.mode-select-item').on('click', function(e) {
+        e.preventDefault();
+        inputMode = $(this).data('mode');
+        const selectedText = $(this).text();
+        $('#modeDropdown').text(selectedText);
+        
+        if (inputMode === 'movie') {
+            $('#grok-feeling-input').attr('placeholder', 'e.g., Interstellar, Zindagi Na Milegi Dobara, Fight Club...');
+            $('#input-mode-title').text('What film speaks to you?');
+        } else if (inputMode === 'author') {
+            $('#grok-feeling-input').attr('placeholder', 'e.g., Friedrich Nietzsche, Maya Angelou, Rumi...');
+            $('#input-mode-title').text('Seek wisdom from...');
         } else {
-            inputMode = 'feeling';
-            $(this).text('🎬 Switch to Movie Mode');
             $('#grok-feeling-input').attr('placeholder', 'e.g., I feel like a ghost drifting through a crowded room...');
+            $('#input-mode-title').text('Speak to the night...');
         }
     });
 

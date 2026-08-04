@@ -29,11 +29,11 @@
         <!-- Viewport Module 0: Attractive Landing Page -->
         <div id="landing-section" class="w-100 fade-in-element">
             <div class="hero-box mx-auto p-4 p-md-5 my-3">
-                <div class="moon-hero-badge mb-3">🌙</div>
-                <h1 class="philosophical-title display-4 mb-3">Every Feeling Has a Meaning</h1>
-                <p class="poetic-subtitle fs-4 mb-4">Explore the hidden depth of your emotions with AI-powered lunar reflections & cinematic mood resonance.</p>
+                <div class="moon-hero-badge mb-3 fade-in-element delay-1">🌙</div>
+                <h1 class="philosophical-title display-4 mb-3 fade-in-element delay-2">Every Feeling Has a Meaning</h1>
+                <p class="poetic-subtitle fs-4 mb-4 fade-in-element delay-3">Explore the hidden depth of your emotions with AI-powered lunar reflections & cinematic mood resonance.</p>
 
-                <div class="d-flex justify-content-center gap-3 flex-wrap my-4">
+                <div class="d-flex justify-content-center gap-3 flex-wrap my-4 fade-in-element delay-4">
                     <button id="landing-login-btn" class="btn btn-action-cosmic btn-lg px-4 py-2 fw-semibold">🔑 Login / Register</button>
                     <button id="landing-explore-btn" class="btn btn-outline-cosmic btn-lg px-4 py-2">✨ Quick Explore</button>
                 </div>
@@ -41,21 +41,21 @@
 
             <!-- App Features Grid -->
             <div class="row justify-content-center g-4 mt-2 max-w-lg mx-auto">
-                <div class="col-md-4">
+                <div class="col-md-4 fade-in-element delay-3">
                     <div class="feature-card h-100 p-4">
                         <div class="feature-icon mb-3">🌕</div>
                         <h4 class="feature-title mb-2">Lunar Mood Alignment</h4>
                         <p class="feature-desc mb-0">Select your preferred moon phase—Full Moon for clarity or Crescent Moon for quiet solitude.</p>
                     </div>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-4 fade-in-element delay-4">
                     <div class="feature-card h-100 p-4">
                         <div class="feature-icon mb-3">🎬</div>
                         <h4 class="feature-title mb-2">Cinematic Movie Mode</h4>
                         <p class="feature-desc mb-0">Type any film title to evoke philosophical quotes matching its atmosphere and theme.</p>
                     </div>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-4 fade-in-element delay-5">
                     <div class="feature-card h-100 p-4">
                         <div class="feature-icon mb-3">📖</div>
                         <h4 class="feature-title mb-2">Personal Moon Diary</h4>
@@ -104,12 +104,12 @@
                 </div>
             </div>
 
-            <h1 class="philosophical-title mb-2">Every feeling has a meaning.</h1>
-            <p class="poetic-subtitle mb-5">What's your favourite moon?</p>
+            <h1 class="philosophical-title mb-2 fade-in-element delay-1">Every feeling has a meaning.</h1>
+            <p class="poetic-subtitle mb-5 fade-in-element delay-2">What's your favourite moon?</p>
             
             <div class="row justify-content-center gap-4 gap-md-5 mt-3">
                 <!-- Full Moon Selection Card -->
-                <div class="col-md-5 col-lg-4 moon-card" data-moon="full">
+                <div class="col-md-5 col-lg-4 moon-card fade-in-element delay-3" data-moon="full">
                     <div class="moon-image-holder">
                         <img src="images/full-moon.png" alt="Full Moon" class="img-fluid moon-img" style="border-radius: 50%;">
                     </div>
@@ -118,7 +118,7 @@
                 </div>
 
                 <!-- Crescent Moon Selection Card -->
-                <div class="col-md-5 col-lg-4 moon-card" data-moon="crescent">
+                <div class="col-md-5 col-lg-4 moon-card fade-in-element delay-4" data-moon="crescent">
                     <div class="moon-image-holder">
                         <img src="images/crescent-moon.png" alt="Crescent Moon" class="img-fluid moon-img" style="border-radius: 50%;">
                     </div>
@@ -141,7 +141,7 @@
             </div>
 
             <!-- Category Filtering Panel -->
-            <div class="d-flex flex-wrap justify-content-center gap-2 mb-4 category-container">
+            <div class="d-flex flex-wrap justify-content-center gap-2 mb-4 category-container fade-in-element delay-1">
                 <button class="btn btn-outline-cosmic cat-btn active" data-category="All">All Space</button>
                 <button class="btn btn-outline-cosmic cat-btn" data-category="Existentialism">Existentialism</button>
                 <button class="btn btn-outline-cosmic cat-btn" data-category="Love">Love</button>
@@ -152,7 +152,7 @@
             </div>
 
             <!-- Quote Display Card -->
-            <div class="quote-box mx-auto my-4 p-4 p-md-5 position-relative">
+            <div class="quote-box mx-auto my-4 p-4 p-md-5 position-relative fade-in-element delay-2">
                 <p id="quote-text" class="quote-text">"Gaze into the cosmos to materialize your reflections..."</p>
                 <p id="quote-author" class="quote-author">— The Night Sky</p>
                 
@@ -163,10 +163,19 @@
             </div>
 
             <!-- Input Prompt Section -->
-            <div class="grok-input-section mx-auto p-4 mt-4">
+            <div class="grok-input-section mx-auto p-4 mt-4 fade-in-element delay-3">
                 <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-                    <h5 class="poetic-subtitle m-0 text-start">Speak to the night...</h5>
-                    <button id="toggle-movie-mode" class="btn btn-sm btn-outline-cosmic" type="button">🎬 Switch to Movie Mode</button>
+                    <h5 id="input-mode-title" class="poetic-subtitle m-0 text-start">Speak to the night...</h5>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-cosmic dropdown-toggle" type="button" id="modeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            💭 Feeling Mode
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end" aria-labelledby="modeDropdown">
+                            <li><a class="dropdown-item mode-select-item" href="#" data-mode="feeling">💭 Feeling Mode</a></li>
+                            <li><a class="dropdown-item mode-select-item" href="#" data-mode="movie">🎬 Movie Mode</a></li>
+                            <li><a class="dropdown-item mode-select-item" href="#" data-mode="author">✍️ Author Mode</a></li>
+                        </ul>
+                    </div>
                 </div>
                 <p class="text-muted text-start small mb-3">Describe your raw, current emotion, or input a cinematic masterpiece to evoke matching stellar insights.</p>
                 

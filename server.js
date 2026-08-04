@@ -139,7 +139,7 @@ function isCompleteSentence(text) {
     return false;
   }
   
-  return /[.!?"]$/.test(trimmed) && trimmed.length >= 15;
+  return trimmed.length >= 10;
 }
 
 // Live External Fetcher 1: Fetch live quotes from online APIs
@@ -257,7 +257,8 @@ app.post(['/api/generate-quote', '/api/quotes/generate'], async (req, res) => {
     let quoteText = "";
     let quoteAuthor = "";
 
-    const isMovieMode = (inputMode === 'movie' || (specificInput && inputMode !== 'feeling'));
+    const isMovieMode = (inputMode === 'movie' || (specificInput && inputMode !== 'feeling' && inputMode !== 'author'));
+    const isAuthorMode = (inputMode === 'author');
     const cleanMovieInput = specificInput ? specificInput.trim() : '';
     const historySet = new Set(generatedQuoteHistory.map(q => typeof q === 'string' ? q.toLowerCase() : String(q.quote || q).toLowerCase()));
 
@@ -286,13 +287,24 @@ app.post(['/api/generate-quote', '/api/quotes/generate'], async (req, res) => {
           systemPrompt = `You are a film scholar and quote engine for "Every Feeling Has a Meaning".
 Generate ONE real, iconic, 100% complete dialogue spoken in the movie: "${cleanMovieInput}".
 STRICT RULES:
-1. The quote MUST be authentic dialogue from "${cleanMovieInput}".
-2. State the exact character who spoke it in author field (e.g., "Cooper (Interstellar)", "Tyler Durden", "John Keating").
+1. The quote MUST be authentic dialogue from "${cleanMovieInput}". Support Hollywood, Bollywood, and Global Cinema. For Bollywood/foreign movies, provide the quote in its original language (e.g., Hinglish) or its English translation.
+2. State the exact character who spoke it in author field (e.g., "Cooper (Interstellar)", "Kabir (ZNMD)").
 3. Must be a complete sentence ending with punctuation.
 4. DO NOT include any quotes referencing "Allah".
 5. DO NOT repeat these past quotes: ${generatedQuoteHistory.slice(-5).join(" | ")}
 6. JSON format: {"quote": "Complete quote text.", "author": "Character Name (Film Title)"}`;
           userPrompt = `Fetch iconic dialogue for movie: "${cleanMovieInput}"`;
+        } else if (isAuthorMode && cleanMovieInput) {
+          systemPrompt = `You are a literary and philosophical archivist for "Every Feeling Has a Meaning".
+The user wants a quote specifically from the author/philosopher: "${cleanMovieInput}".
+STRICT RULES:
+1. Generate ONE profound, authentic, and complete quote originally spoken or written by "${cleanMovieInput}".
+2. State the exact author name in the author field.
+3. Must be a complete sentence ending with punctuation.
+4. DO NOT include any quotes referencing "Allah".
+5. DO NOT repeat these past quotes: ${generatedQuoteHistory.slice(-5).join(" | ")}
+6. JSON format: {"quote": "Complete quote text.", "author": "Author Name"}`;
+          userPrompt = `Provide a deep, meaningful quote by: "${cleanMovieInput}"`;
         } else {
           systemPrompt = `You are an old, profound philosopher for an app named "Every Feeling Has a Meaning".
 The user will provide a word or phrase describing how they currently FEEL (e.g., "dead", "empty", "joyful", "lost").
@@ -320,12 +332,13 @@ STRICT RULES:
           response_format: { type: "json_object" }
         });
 
-        const contentStr = chatCompletion.choices[0]?.message?.content;
+        let contentStr = chatCompletion.choices[0]?.message?.content;
         if (contentStr) {
+          contentStr = contentStr.replace(/```json/gi, '').replace(/```/g, '').trim();
           const parsed = JSON.parse(contentStr);
           if (parsed.quote && isCompleteSentence(parsed.quote)) {
             quoteText = parsed.quote.trim();
-            quoteAuthor = parsed.author || (isMovieMode ? `${cleanMovieInput} Cinema` : "Old Philosopher");
+            quoteAuthor = parsed.author || (isMovieMode ? `${cleanMovieInput} Cinema` : (isAuthorMode ? cleanMovieInput : "Old Philosopher"));
           }
         }
       } catch (groqErr) {
@@ -336,7 +349,7 @@ STRICT RULES:
     // -----------------------------------------------------------------------
     // STEP 3: Live External Real-Time Quote API Fetching (Online APIs)
     // -----------------------------------------------------------------------
-    if (!quoteText && !isMovieMode) {
+    if (!quoteText && !isMovieMode && !cleanMovieInput) {
       const onlineQuote = await fetchRealTimeQuoteOnline();
       if (onlineQuote && isCompleteSentence(onlineQuote.quote) && !historySet.has(onlineQuote.quote.toLowerCase())) {
         quoteText = onlineQuote.quote;
@@ -352,8 +365,15 @@ STRICT RULES:
         quoteText = `Great stories do not fade when the screen goes dark; they linger in the quiet thoughts of those who marveled at them.`;
         quoteAuthor = `${cleanMovieInput} Cinema`;
       } else {
-        const available = CLASSIC_PHILOSOPHERS.filter(item => !historySet.has(item.quote.toLowerCase()));
+        let available = CLASSIC_PHILOSOPHERS.filter(item => !historySet.has(item.quote.toLowerCase()));
         
+        if (cleanMovieInput) {
+            const feelingMatch = available.filter(item => item.quote.toLowerCase().includes(cleanMovieInput.toLowerCase()));
+            if (feelingMatch.length > 0) {
+                available = feelingMatch;
+            }
+        }
+
         const selected = available.length > 0
           ? available[Math.floor(Math.random() * available.length)]
           : CLASSIC_PHILOSOPHERS[Math.floor(Math.random() * CLASSIC_PHILOSOPHERS.length)];
