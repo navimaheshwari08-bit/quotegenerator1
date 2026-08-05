@@ -128,6 +128,48 @@ const CLASSIC_PHILOSOPHERS = [
   { quote: "The unexamined life is not worth living.", author: "Socrates" }
 ];
 
+const PREDEFINED_MOVIES = {
+  "dead poets society": [
+    { quote: "Carpe diem. Seize the day, boys. Make your lives extraordinary.", author: "John Keating (Dead Poets Society)" },
+    { quote: "We don't read and write poetry because it's cute. We read and write poetry because we are members of the human race. And the human race is filled with passion.", author: "John Keating (Dead Poets Society)" },
+    { quote: "No matter what anybody tells you, words and ideas can change the world.", author: "John Keating (Dead Poets Society)" },
+    { quote: "There's a time for daring and there's a time for caution, and a wise man understands which is called for.", author: "John Keating (Dead Poets Society)" },
+    { quote: "I went to the woods because I wanted to live deliberately. I wanted to live deep and suck out all the marrow of life.", author: "John Keating (Dead Poets Society)" },
+    { quote: "But only in their dreams can men be truly free. 'Twas always thus, and always thus will be.", author: "John Keating (Dead Poets Society)" },
+    { quote: "You must strive to find your own voice. Because the longer you wait to begin, the less likely you are to find it at all.", author: "John Keating (Dead Poets Society)" },
+    { quote: "Boys, you must strive to find your own voice. Because the longer you wait to begin, the less likely you are to find it at all. Thoreau said, 'Most men lead lives of quiet desperation.' Don't be resigned to that. Break out!", author: "John Keating (Dead Poets Society)" }
+  ],
+  "pyaasa": [
+    { quote: "Yeh duniya agar mil bhi jaye to kya hai?", author: "Vijay (Pyaasa)" },
+    { quote: "Jane woh kaise log the jinke pyar ko pyar mila.", author: "Vijay (Pyaasa)" },
+    { quote: "Jinhe naaz hai hind par woh kahan hain?", author: "Vijay (Pyaasa)" },
+    { quote: "Humne to jab kaliyan mangi kaanton ka haar mila.", author: "Vijay (Pyaasa)" }
+  ],
+  "kaagaz ke phool": [
+    { quote: "Waqt ne kiya kya haseen sitam, tum rahe na tum hum rahe na hum.", author: "Suresh (Kaagaz Ke Phool)" },
+    { quote: "Dekhi zamaane ki yaari, bichhde sabhi baari baari.", author: "Suresh (Kaagaz Ke Phool)" },
+    { quote: "Ek nayi duniya basayenge, ek naye asmaan ke neeche.", author: "Shanti (Kaagaz Ke Phool)" }
+  ]
+};
+
+const PREDEFINED_AUTHORS = {
+  "fyodor dostoevsky": [
+    { quote: "Pain and suffering are always inevitable for a large intelligence and a deep heart.", author: "Fyodor Dostoevsky" },
+    { quote: "The soul is healed by being with children.", author: "Fyodor Dostoevsky" },
+    { quote: "To go wrong in one's own way is better than to go right in someone else's.", author: "Fyodor Dostoevsky" },
+    { quote: "It takes something more than intelligence to act intelligently.", author: "Fyodor Dostoevsky" },
+    { quote: "Man is sometimes extraordinarily, passionately, in love with suffering.", author: "Fyodor Dostoevsky" },
+    { quote: "The mystery of human existence lies not in just staying alive, but in finding something to live for.", author: "Fyodor Dostoevsky" }
+  ],
+  "franz kafka": [
+    { quote: "A book must be the axe for the frozen sea within us.", author: "Franz Kafka" },
+    { quote: "I am a cage, in search of a bird.", author: "Franz Kafka" },
+    { quote: "By believing passionately in something that still does not exist, we create it.", author: "Franz Kafka" },
+    { quote: "Youth is happy because it has the capacity to see beauty. Anyone who keeps the ability to see beauty never grows old.", author: "Franz Kafka" },
+    { quote: "Meaningful things are always simple.", author: "Franz Kafka" }
+  ]
+};
+
 // Helper: Sentence completeness check
 function isCompleteSentence(text) {
   if (!text || typeof text !== 'string') return false;
@@ -263,18 +305,38 @@ app.post(['/api/generate-quote', '/api/quotes/generate'], async (req, res) => {
     const historySet = new Set(generatedQuoteHistory.map(q => typeof q === 'string' ? q.toLowerCase() : String(q.quote || q).toLowerCase()));
 
     // -----------------------------------------------------------------------
-    // STEP 1: If Movie Mode, try Live Real-Time Wikiquote API Fetching
+    // STEP 0: PREDEFINED MOVIES
     // -----------------------------------------------------------------------
-    if (isMovieMode && cleanMovieInput) {
-      const liveMovieResult = await fetchRealTimeWikiquoteMovie(cleanMovieInput, historySet);
-      if (liveMovieResult && isCompleteSentence(liveMovieResult.quote)) {
-        quoteText = liveMovieResult.quote;
-        quoteAuthor = liveMovieResult.author;
+    if (isMovieMode && cleanMovieInput && PREDEFINED_MOVIES[cleanMovieInput.toLowerCase()]) {
+      const movieQuotes = PREDEFINED_MOVIES[cleanMovieInput.toLowerCase()];
+      const available = movieQuotes.filter(q => !historySet.has(q.quote.toLowerCase()));
+      if (available.length > 0) {
+        const selected = available[Math.floor(Math.random() * available.length)];
+        quoteText = selected.quote;
+        quoteAuthor = selected.author;
+      } else {
+        // Reset if all are used
+        const selected = movieQuotes[Math.floor(Math.random() * movieQuotes.length)];
+        quoteText = selected.quote;
+        quoteAuthor = selected.author;
+      }
+    } else if (isAuthorMode && cleanMovieInput && PREDEFINED_AUTHORS[cleanMovieInput.toLowerCase()]) {
+      const authorQuotes = PREDEFINED_AUTHORS[cleanMovieInput.toLowerCase()];
+      const available = authorQuotes.filter(q => !historySet.has(q.quote.toLowerCase()));
+      if (available.length > 0) {
+        const selected = available[Math.floor(Math.random() * available.length)];
+        quoteText = selected.quote;
+        quoteAuthor = selected.author;
+      } else {
+        // Reset if all are used
+        const selected = authorQuotes[Math.floor(Math.random() * authorQuotes.length)];
+        quoteText = selected.quote;
+        quoteAuthor = selected.author;
       }
     }
 
     // -----------------------------------------------------------------------
-    // STEP 2: Try Groq AI for Live Real-Time Philosophical / Movie Generation
+    // STEP 1: Try Groq AI for Live Real-Time Philosophical / Movie Generation
     // -----------------------------------------------------------------------
     if (!quoteText && apiKey && apiKey.trim() !== '' && !apiKey.includes('your_groq_api_key')) {
       try {
@@ -285,26 +347,28 @@ app.post(['/api/generate-quote', '/api/quotes/generate'], async (req, res) => {
 
         if (isMovieMode && cleanMovieInput) {
           systemPrompt = `You are a film scholar and quote engine for "Every Feeling Has a Meaning".
-Generate ONE real, iconic, 100% complete dialogue spoken in the movie: "${cleanMovieInput}".
+The user has requested a quote from: "${cleanMovieInput}".
 STRICT RULES:
-1. The quote MUST be authentic dialogue from "${cleanMovieInput}". Support Hollywood, Bollywood, and Global Cinema. For Bollywood/foreign movies, provide the quote in its original language (e.g., Hinglish) or its English translation.
-2. State the exact character who spoke it in author field (e.g., "Cooper (Interstellar)", "Kabir (ZNMD)").
-3. Must be a complete sentence ending with punctuation.
-4. DO NOT include any quotes referencing "Allah".
-5. DO NOT repeat these past quotes: ${generatedQuoteHistory.slice(-5).join(" | ")}
-6. JSON format: {"quote": "Complete quote text.", "author": "Character Name (Film Title)"}`;
-          userPrompt = `Fetch iconic dialogue for movie: "${cleanMovieInput}"`;
+1. Verify if "${cleanMovieInput}" is a Movie. If it is a video game, TV show, book, or anything OTHER than a movie, you MUST output this exact JSON: {"quote": "I can only reflect upon cinematic movies.", "author": "Night Sky"} and STOP. Do not generate a quote.
+2. If it is a movie, generate ONE real, iconic, 100% complete dialogue spoken in it. Support Global Cinema (e.g. Hollywood, Bollywood).
+3. State the exact character who spoke it in the author field (e.g., "Cooper (Interstellar)").
+4. Must be a complete sentence ending with punctuation. Always provide the FULL quote without truncation.
+5. DO NOT include any quotes referencing "Allah".
+6. DO NOT repeat these past quotes: ${generatedQuoteHistory.slice(-20).join(" | ")}
+7. JSON format: {"quote": "Complete quote text.", "author": "Character Name (Film Title)"}`;
+          userPrompt = `Fetch iconic dialogue for: "${cleanMovieInput}"`;
         } else if (isAuthorMode && cleanMovieInput) {
           systemPrompt = `You are a literary and philosophical archivist for "Every Feeling Has a Meaning".
 The user wants a quote specifically from the author/philosopher: "${cleanMovieInput}".
 STRICT RULES:
-1. Generate ONE profound, authentic, and complete quote originally spoken or written by "${cleanMovieInput}".
-2. State the exact author name in the author field.
-3. Must be a complete sentence ending with punctuation.
-4. DO NOT include any quotes referencing "Allah".
-5. DO NOT repeat these past quotes: ${generatedQuoteHistory.slice(-5).join(" | ")}
-6. JSON format: {"quote": "Complete quote text.", "author": "Author Name"}`;
-          userPrompt = `Provide a deep, meaningful quote by: "${cleanMovieInput}"`;
+1. Identify the most likely famous author, philosopher, or poet based on "${cleanMovieInput}". (The user may have provided an incomplete or partial name).
+2. Generate ONE profound, authentic, and complete quote originally spoken or written by this identified author.
+3. State their exact full name in the author field.
+4. Must be a complete sentence ending with punctuation. Always provide the FULL quote without truncation.
+5. DO NOT include any quotes referencing "Allah".
+6. DO NOT repeat these past quotes: ${generatedQuoteHistory.slice(-20).join(" | ")}
+7. JSON format: {"quote": "Complete quote text.", "author": "Author Full Name"}`;
+          userPrompt = `Provide a deep, meaningful, and full quote by: "${cleanMovieInput}"`;
         } else {
           systemPrompt = `You are an old, profound philosopher for an app named "Every Feeling Has a Meaning".
 The user will provide a word or phrase describing how they currently FEEL (e.g., "dead", "empty", "joyful", "lost").
@@ -316,9 +380,9 @@ STRICT RULES:
 2. State the exact classic philosopher's name who inspired it (e.g., Marcus Aurelius, Nietzsche, Camus, Rilke, Seneca, Rumi) or "The Night Sky".
 3. DO NOT include any quotes referencing "Allah".
 4. DO NOT literally use words like "crescent" or "full" in the quote.
-5. DO NOT repeat these past quotes: ${generatedQuoteHistory.slice(-5).join(" | ")}
-6. JSON format: {"quote": "Complete quote text.", "author": "Philosopher Name"}`;
-          userPrompt = `The user feels: "${cleanMovieInput || activeCategory}". Provide a philosophical quote about this feeling.`;
+5. DO NOT repeat these past quotes: ${generatedQuoteHistory.slice(-20).join(" | ")}
+6. JSON format: {"quote": "Complete full quote text.", "author": "Philosopher Name"}`;
+          userPrompt = `The user feels: "${cleanMovieInput || activeCategory}". Provide a full philosophical quote about this feeling.`;
         }
 
         const chatCompletion = await groq.chat.completions.create({
@@ -328,7 +392,7 @@ STRICT RULES:
           ],
           model: 'llama-3.3-70b-versatile',
           temperature: 0.7,
-          max_tokens: 500,
+          max_tokens: 2000,
           response_format: { type: "json_object" }
         });
 
@@ -336,13 +400,24 @@ STRICT RULES:
         if (contentStr) {
           contentStr = contentStr.replace(/```json/gi, '').replace(/```/g, '').trim();
           const parsed = JSON.parse(contentStr);
-          if (parsed.quote && isCompleteSentence(parsed.quote)) {
+          if (parsed.quote && isCompleteSentence(parsed.quote) && !historySet.has(parsed.quote.trim().toLowerCase())) {
             quoteText = parsed.quote.trim();
             quoteAuthor = parsed.author || (isMovieMode ? `${cleanMovieInput} Cinema` : (isAuthorMode ? cleanMovieInput : "Old Philosopher"));
           }
         }
       } catch (groqErr) {
         console.warn('Groq API warning:', groqErr.message);
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // STEP 2: If Movie Mode and Groq didn't provide a quote, try Live Real-Time Wikiquote API Fetching
+    // -----------------------------------------------------------------------
+    if (!quoteText && isMovieMode && cleanMovieInput) {
+      const liveMovieResult = await fetchRealTimeWikiquoteMovie(cleanMovieInput, historySet);
+      if (liveMovieResult && isCompleteSentence(liveMovieResult.quote)) {
+        quoteText = liveMovieResult.quote;
+        quoteAuthor = liveMovieResult.author;
       }
     }
 
@@ -364,6 +439,18 @@ STRICT RULES:
       if (isMovieMode && cleanMovieInput) {
         quoteText = `Great stories do not fade when the screen goes dark; they linger in the quiet thoughts of those who marveled at them.`;
         quoteAuthor = `${cleanMovieInput} Cinema`;
+      } else if (isAuthorMode && cleanMovieInput) {
+        let available = CLASSIC_PHILOSOPHERS.filter(item => !historySet.has(item.quote.toLowerCase()));
+        
+        const authorMatch = available.filter(item => item.author.toLowerCase().includes(cleanMovieInput.toLowerCase()));
+        if (authorMatch.length > 0) {
+            const selected = authorMatch[Math.floor(Math.random() * authorMatch.length)];
+            quoteText = selected.quote;
+            quoteAuthor = selected.author;
+        } else {
+            quoteText = `The words of ${cleanMovieInput} echo in the silence, though they escape my memory tonight.`;
+            quoteAuthor = "Philosophical Archive";
+        }
       } else {
         let available = CLASSIC_PHILOSOPHERS.filter(item => !historySet.has(item.quote.toLowerCase()));
         
