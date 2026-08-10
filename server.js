@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
-import Groq from 'groq-sdk';
 
 import { connectDB, getDBStatus } from './config/db.js';
 import User from './models/User.js';
@@ -294,116 +293,136 @@ async function fetchRealTimeWikiquoteMovie(movieTitle, historySet) {
 app.post(['/api/generate-quote', '/api/quotes/generate'], async (req, res) => {
   try {
     const { specificInput = '', inputMode = 'feeling', selectedMoon = 'full', activeCategory = 'All', generatedQuoteHistory = [] } = req.body;
-    const apiKey = process.env.GROQ_API_KEY;
 
     let quoteText = "";
     let quoteAuthor = "";
 
-    const isMovieMode = (inputMode === 'movie' || (specificInput && inputMode !== 'feeling' && inputMode !== 'author'));
+    // inputMode is authoritative: 'movie', 'author', or 'feeling'
+    const isMovieMode  = (inputMode === 'movie');
     const isAuthorMode = (inputMode === 'author');
-    const cleanMovieInput = specificInput ? specificInput.trim() : '';
-    const historySet = new Set(generatedQuoteHistory.map(q => typeof q === 'string' ? q.toLowerCase() : String(q.quote || q).toLowerCase()));
+    const cleanInput   = specificInput ? specificInput.trim() : '';
+    const cleanInputLC = cleanInput.toLowerCase();
+    const historySet   = new Set(generatedQuoteHistory.map(q => typeof q === 'string' ? q.toLowerCase() : String(q.quote || q).toLowerCase()));
 
     // -----------------------------------------------------------------------
-    // STEP 0: PREDEFINED MOVIES
+    // STEP 0: PREDEFINED HARDCODED MOVIES — exact match first, then partial
     // -----------------------------------------------------------------------
-    if (isMovieMode && cleanMovieInput && PREDEFINED_MOVIES[cleanMovieInput.toLowerCase()]) {
-      const movieQuotes = PREDEFINED_MOVIES[cleanMovieInput.toLowerCase()];
-      const available = movieQuotes.filter(q => !historySet.has(q.quote.toLowerCase()));
-      if (available.length > 0) {
-        const selected = available[Math.floor(Math.random() * available.length)];
-        quoteText = selected.quote;
-        quoteAuthor = selected.author;
-      } else {
-        // Reset if all are used
-        const selected = movieQuotes[Math.floor(Math.random() * movieQuotes.length)];
-        quoteText = selected.quote;
+    if (isMovieMode && cleanInput) {
+      // Try exact match
+      let predefinedKey = Object.keys(PREDEFINED_MOVIES).find(k => k === cleanInputLC);
+      // Try partial match (user typed part of the title)
+      if (!predefinedKey) {
+        predefinedKey = Object.keys(PREDEFINED_MOVIES).find(k => k.includes(cleanInputLC) || cleanInputLC.includes(k));
+      }
+      if (predefinedKey) {
+        const movieQuotes = PREDEFINED_MOVIES[predefinedKey];
+        const available = movieQuotes.filter(q => !historySet.has(q.quote.toLowerCase()));
+        const selected = available.length > 0
+          ? available[Math.floor(Math.random() * available.length)]
+          : movieQuotes[Math.floor(Math.random() * movieQuotes.length)];
+        quoteText  = selected.quote;
         quoteAuthor = selected.author;
       }
-    } else if (isAuthorMode && cleanMovieInput && PREDEFINED_AUTHORS[cleanMovieInput.toLowerCase()]) {
-      const authorQuotes = PREDEFINED_AUTHORS[cleanMovieInput.toLowerCase()];
-      const available = authorQuotes.filter(q => !historySet.has(q.quote.toLowerCase()));
-      if (available.length > 0) {
-        const selected = available[Math.floor(Math.random() * available.length)];
-        quoteText = selected.quote;
-        quoteAuthor = selected.author;
-      } else {
-        // Reset if all are used
-        const selected = authorQuotes[Math.floor(Math.random() * authorQuotes.length)];
-        quoteText = selected.quote;
+    } else if (isAuthorMode && cleanInput) {
+      // Try exact match
+      let predefinedKey = Object.keys(PREDEFINED_AUTHORS).find(k => k === cleanInputLC);
+      // Try partial match
+      if (!predefinedKey) {
+        predefinedKey = Object.keys(PREDEFINED_AUTHORS).find(k => k.includes(cleanInputLC) || cleanInputLC.includes(k));
+      }
+      if (predefinedKey) {
+        const authorQuotes = PREDEFINED_AUTHORS[predefinedKey];
+        const available = authorQuotes.filter(q => !historySet.has(q.quote.toLowerCase()));
+        const selected = available.length > 0
+          ? available[Math.floor(Math.random() * available.length)]
+          : authorQuotes[Math.floor(Math.random() * authorQuotes.length)];
+        quoteText  = selected.quote;
         quoteAuthor = selected.author;
       }
     }
 
-    // -----------------------------------------------------------------------
-    // STEP 1: Try Groq AI for Live Real-Time Philosophical / Movie Generation
-    // -----------------------------------------------------------------------
-    if (!quoteText && apiKey && apiKey.trim() !== '' && !apiKey.includes('your_groq_api_key')) {
-      try {
-        const groq = new Groq({ apiKey });
+    // Alias for use in later steps
+    const cleanMovieInput = cleanInput;
 
+    // -----------------------------------------------------------------------
+    // STEP 1: Try Groq AI for Live Real-Time Philosophical / Movie / Author Generation
+    // -----------------------------------------------------------------------
+    const groqApiKey = process.env.GROQ_API_KEY;
+    if (!quoteText && groqApiKey && groqApiKey.trim() !== '' && !groqApiKey.includes('your_groq_api_key')) {
+      try {
         let systemPrompt = "";
         let userPrompt = "";
 
         if (isMovieMode && cleanMovieInput) {
           systemPrompt = `You are a film scholar and quote engine for "Every Feeling Has a Meaning".
-The user has requested a quote from: "${cleanMovieInput}".
+The user has requested a quote from the movie: "${cleanMovieInput}".
 STRICT RULES:
-1. Verify if "${cleanMovieInput}" is a Movie. If it is a video game, TV show, book, or anything OTHER than a movie, you MUST output this exact JSON: {"quote": "I can only reflect upon cinematic movies.", "author": "Night Sky"} and STOP. Do not generate a quote.
-2. If it is a movie, generate ONE real, iconic, 100% complete dialogue spoken in it. Support Global Cinema (e.g. Hollywood, Bollywood).
+1. Verify if "${cleanMovieInput}" is a Movie. If it is a video game, TV show, book, or anything OTHER than a movie, output exactly: {"quote": "I can only reflect upon cinematic movies.", "author": "Night Sky"} and STOP.
+2. If it is a movie, generate ONE real, iconic, 100% complete dialogue spoken in it. Support Global Cinema (Hollywood, Bollywood, etc).
 3. State the exact character who spoke it in the author field (e.g., "Cooper (Interstellar)").
 4. Must be a complete sentence ending with punctuation. Always provide the FULL quote without truncation.
 5. DO NOT include any quotes referencing "Allah".
 6. DO NOT repeat these past quotes: ${generatedQuoteHistory.slice(-20).join(" | ")}
-7. JSON format: {"quote": "Complete quote text.", "author": "Character Name (Film Title)"}`;
-          userPrompt = `Fetch iconic dialogue for: "${cleanMovieInput}"`;
+7. Respond ONLY with valid JSON: {"quote": "Complete quote text.", "author": "Character Name (Film Title)"}`;
+          userPrompt = `Give me an iconic dialogue from the movie: "${cleanMovieInput}"`;
         } else if (isAuthorMode && cleanMovieInput) {
           systemPrompt = `You are a literary and philosophical archivist for "Every Feeling Has a Meaning".
-The user wants a quote specifically from the author/philosopher: "${cleanMovieInput}".
+The user wants a quote specifically from: "${cleanMovieInput}".
 STRICT RULES:
-1. Identify the most likely famous author, philosopher, or poet based on "${cleanMovieInput}". (The user may have provided an incomplete or partial name).
-2. Generate ONE profound, authentic, and complete quote originally spoken or written by this identified author.
+1. Identify the most likely famous author, philosopher, or poet based on "${cleanMovieInput}" (may be partial name).
+2. Generate ONE profound, authentic, and complete quote originally written by this identified person.
 3. State their exact full name in the author field.
 4. Must be a complete sentence ending with punctuation. Always provide the FULL quote without truncation.
 5. DO NOT include any quotes referencing "Allah".
 6. DO NOT repeat these past quotes: ${generatedQuoteHistory.slice(-20).join(" | ")}
-7. JSON format: {"quote": "Complete quote text.", "author": "Author Full Name"}`;
-          userPrompt = `Provide a deep, meaningful, and full quote by: "${cleanMovieInput}"`;
+7. Respond ONLY with valid JSON: {"quote": "Complete quote text.", "author": "Author Full Name"}`;
+          userPrompt = `Provide a meaningful quote by: "${cleanMovieInput}"`;
         } else {
-          systemPrompt = `You are an old, profound philosopher for an app named "Every Feeling Has a Meaning".
-The user will provide a word or phrase describing how they currently FEEL (e.g., "dead", "empty", "joyful", "lost").
-Your goal is to inspire the user with deep, melancholic, sad, meaningful, and pure-feeling wisdom about that exact EMOTION/FEELING. 
-Do NOT treat the user's input as an author's name or literal entity. It is a description of an emotional state.
-
+          systemPrompt = `You are a profound philosopher for an app named "Every Feeling Has a Meaning".
+The user will describe how they FEEL. Inspire them with deep, meaningful wisdom about that exact emotion.
+Do NOT treat the user's input as an author name. It is a description of an emotional state.
 STRICT RULES:
-1. Generate ONE profound, complete quote about the feeling of "${cleanMovieInput || 'silence of the night'}".
-2. State the exact classic philosopher's name who inspired it (e.g., Marcus Aurelius, Nietzsche, Camus, Rilke, Seneca, Rumi) or "The Night Sky".
+1. Generate ONE profound, complete quote matching the feeling of "${cleanMovieInput || 'the quiet of night'}".
+2. Attribute it to a real classic philosopher (Marcus Aurelius, Nietzsche, Camus, Rilke, Seneca, Rumi, etc.) or "The Night Sky".
 3. DO NOT include any quotes referencing "Allah".
 4. DO NOT literally use words like "crescent" or "full" in the quote.
 5. DO NOT repeat these past quotes: ${generatedQuoteHistory.slice(-20).join(" | ")}
-6. JSON format: {"quote": "Complete full quote text.", "author": "Philosopher Name"}`;
-          userPrompt = `The user feels: "${cleanMovieInput || activeCategory}". Provide a full philosophical quote about this feeling.`;
+6. Respond ONLY with valid JSON: {"quote": "Complete full quote text.", "author": "Philosopher Name"}`;
+          userPrompt = `The user feels: "${cleanMovieInput || activeCategory}". Give a philosophical quote about this feeling.`;
         }
 
-        const chatCompletion = await groq.chat.completions.create({
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          model: 'llama-3.3-70b-versatile',
-          temperature: 0.7,
-          max_tokens: 2000,
-          response_format: { type: "json_object" }
+        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${groqApiKey}`
+          },
+          body: JSON.stringify({
+            model: 'llama3-8b-8192',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.75,
+            max_tokens: 500,
+            response_format: { type: 'json_object' }
+          })
         });
 
-        let contentStr = chatCompletion.choices[0]?.message?.content;
-        if (contentStr) {
-          contentStr = contentStr.replace(/```json/gi, '').replace(/```/g, '').trim();
-          const parsed = JSON.parse(contentStr);
-          if (parsed.quote && isCompleteSentence(parsed.quote) && !historySet.has(parsed.quote.trim().toLowerCase())) {
-            quoteText = parsed.quote.trim();
-            quoteAuthor = parsed.author || (isMovieMode ? `${cleanMovieInput} Cinema` : (isAuthorMode ? cleanMovieInput : "Old Philosopher"));
+        if (groqRes.ok) {
+          const groqData = await groqRes.json();
+          let contentStr = groqData?.choices?.[0]?.message?.content;
+          if (contentStr) {
+            contentStr = contentStr.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const parsed = JSON.parse(contentStr);
+            if (parsed.quote && isCompleteSentence(parsed.quote) && !historySet.has(parsed.quote.trim().toLowerCase())) {
+              quoteText = parsed.quote.trim();
+              quoteAuthor = parsed.author || (isMovieMode ? `${cleanMovieInput} Cinema` : (isAuthorMode ? cleanMovieInput : 'Philosopher'));
+            }
           }
+        } else {
+          const errBody = await groqRes.text();
+          console.warn('Groq API error:', groqRes.status, errBody);
         }
       } catch (groqErr) {
         console.warn('Groq API warning:', groqErr.message);
@@ -411,7 +430,7 @@ STRICT RULES:
     }
 
     // -----------------------------------------------------------------------
-    // STEP 2: If Movie Mode and Groq didn't provide a quote, try Live Real-Time Wikiquote API Fetching
+    // STEP 2: If Movie Mode and Gemini didn't provide a quote, try Live Real-Time Wikiquote API Fetching
     // -----------------------------------------------------------------------
     if (!quoteText && isMovieMode && cleanMovieInput) {
       const liveMovieResult = await fetchRealTimeWikiquoteMovie(cleanMovieInput, historySet);

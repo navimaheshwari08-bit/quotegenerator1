@@ -223,7 +223,9 @@ $(document).ready(function() {
     $('.moon-card').on('click', function() {
         selectedMoon = $(this).data('moon');
         navigateTo('dashboard');
-        generateLiveAIQuote();
+        // Pass any already-typed input; otherwise generate a fresh quote
+        const currentInput = $('#grok-feeling-input').val().trim() || null;
+        generateLiveAIQuote(currentInput);
     });
 
     $('#dashboard-back-moon-btn, #back-to-moons').on('click', function() {
@@ -245,7 +247,8 @@ $(document).ready(function() {
         $('.cat-btn').removeClass('active');
         $(this).addClass('active');
         activeCategory = $(this).data('category');
-        generateLiveAIQuote();
+        const currentInput = $('#grok-feeling-input').val().trim() || null;
+        generateLiveAIQuote(currentInput);
     });
 
     // Input Mode Selection
@@ -433,6 +436,18 @@ $(document).ready(function() {
     $('#next-quote-btn').on('click', () => generateLiveAIQuote($('#grok-feeling-input').val().trim() || null));
     $('#grok-submit-btn').on('click', () => {
         const val = $('#grok-feeling-input').val().trim();
-        generateLiveAIQuote(val || null);
+        if (!val) {
+            showNotification('Please type something to search for a quote.', 'error');
+            return;
+        }
+        generateLiveAIQuote(val);
+    });
+
+    // Allow pressing Enter in the input field
+    $('#grok-feeling-input').on('keypress', function(e) {
+        if (e.which === 13) {
+            const val = $(this).val().trim();
+            generateLiveAIQuote(val || null);
+        }
     });
 });
